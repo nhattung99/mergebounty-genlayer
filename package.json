@@ -1,0 +1,9 @@
+{
+  "name": "mergebounty",
+  "private": true,
+  "scripts": {
+    "prebuild": "node scripts/check-no-float-money.js",
+    "build": "npm run build --prefix frontend",
+    "test": "python -m pytest tests/test_merge_bounty.py -q"
+  }
+}
