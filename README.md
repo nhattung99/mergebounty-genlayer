@@ -63,6 +63,10 @@ The contract header pins the runner:
 - `create_bounty` is `@gl.public.write.payable`. Runner v0.2.16 rejects a non-zero value on a method that is not payable. The other methods do not receive GEN.
 - The validator reads `Return.calldata`, which is the SDK field. `Return` has no `.value` field.
 
+## Live App
+
+https://mergebounty-genlayer.vercel.app
+
 ## Deployed Contract
 
 - Address (studionet): `0x9FB944605bAFe0FfBBE679b65B054afA6bAb3CF1`
