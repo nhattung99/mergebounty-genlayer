@@ -1,92 +1,80 @@
 # MergeBounty
 
-Escrow bounty cho open source trên GenLayer. Maintainer khoá một khoản GEN cố định cùng link issue và tiêu chí chấp nhận. Contributor nộp pull request trong cùng repo, ghi ví nhận thưởng vào mô tả PR. Đồng thuận AI đọc issue, PR và các trang bằng chứng (Files changed, Checks/CI) rồi trả về đúng một trong hai kết quả: `ACCEPTED` hoặc `REJECTED`. Merge của maintainer không phải điều kiện trả thưởng.
+GEN escrow for open-source work on GenLayer. A maintainer locks a fixed GEN reward with a GitHub issue link and acceptance criteria. A contributor opens a pull request in that same repository and writes their payout wallet into the PR description. GenLayer's AI consensus reads the issue, the pull request, and the evidence pages (Files changed, Checks/CI), then returns exactly one of `ACCEPTED` or `REJECTED`. A maintainer merge is not required for payment.
 
-> MergeBounty chết nếu không có GenLayer: không có smart contract EVM nào đọc hiểu được diff và kết quả CI của một PR để đối chiếu với tiêu chí viết bằng ngôn ngữ tự nhiên, và không có maintainer nào đủ thời gian duyệt từng bounty nhỏ — chỉ có đồng thuận AI phi tập trung của GenLayer mới xác minh và trả thưởng tự động với chi phí gần bằng 0.
+> MergeBounty needs GenLayer. No EVM contract can read a pull request diff and a CI result and compare them with criteria written in natural language, and no maintainer has time to review every small bounty. Only GenLayer's decentralized AI consensus can check the work and pay it automatically.
 
-Đây là bản tự xây, lấy cảm hứng từ ý tưởng bounty tự động cho open source. Không phải bản sao của dự án nào, không dùng chuỗi khác, tiền thưởng là GEN.
+This is an original build inspired by the idea of automatic open-source bounties. It is not a copy of another project, it does not use another chain, and the reward is GEN.
 
-## Vì sao verdict chỉ có hai giá trị
+## Why the verdict is binary
 
-Thưởng là số cố định lúc tạo bounty. Validator so **tuyệt đối** verdict (`==`) và so tuyệt đối nhánh `confidence >= 60` (nhánh này quyết định có chuyển tiền hay giữ escrow). Không có dung sai phần trăm, không có phép tính trên số tiền. Hai validator không thể “đồng thuận” rồi chốt hai khoản khác nhau.
+The reward is fixed when the bounty is created. Validators compare the verdict with absolute equality (`==`) and compare the `confidence >= 60` branch the same way. That branch decides whether money moves or stays in escrow. There is no percent tolerance and no arithmetic on the amount. Two validators cannot agree and then settle two different sums.
 
-## Kiến trúc
+## Architecture
 
-Một contract duy nhất, `contracts/merge_bounty.py`, giữ GEN trực tiếp.
+One contract, `contracts/merge_bounty.py`, holds the GEN itself.
 
-1. `create_bounty` nhận GEN kèm giao dịch, khoá `issue_url`, `acceptance_criteria`, `reward_amount`, `deadline`. Không có hàm sửa các trường này, không có hàm huỷ.
-2. `submit_solution` chỉ nhận PR thuộc đúng `https://github.com/<owner>/<repo>/pull/` của issue, và ít nhất một trang bằng chứng `https://github.com/`.
-3. `resolve_submission` ai cũng gọi được. Trước khi gọi LLM, code kiểm tra ví người nộp (`gl.message.sender_address`, hex chữ thường) có nằm trong nội dung trang PR. Không thấy thì `REJECTED` ngay, không gọi LLM.
-4. `ACCEPTED` và confidence từ 60 trở lên: trả toàn bộ thưởng cho contributor. `REJECTED` khi còn hạn: bounty mở lại, tiền ở lại escrow. `REJECTED` khi đã quá hạn: hoàn maintainer.
-5. Confidence dưới 60: `DISPUTED`. Chỉ contributor hiện tại được nộp lại. Người khác bị chặn tới khi resolve lại hoặc hết hạn.
-6. Hết hạn khi đang `OPEN` hoặc `DISPUTED`: maintainer gọi `claim_expired_refund`. Trạng thái `SUBMITTED` quá hạn không hoàn tắt — phải resolve trước.
-7. Mọi lần chuyển tiền đi qua `_settle`: lưu người nhận và trạng thái thành công trước, rồi mới `emit_transfer`. `retry_resolution` chỉ đọc ý định đã lưu, không chạy lại AI.
+1. `create_bounty` receives GEN with the transaction and locks `issue_url`, `acceptance_criteria`, `reward_amount`, and `deadline`. Nothing can edit those fields, and there is no cancel function.
+2. `submit_solution` accepts only a pull request under `https://github.com/<owner>/<repo>/pull/` for that issue, plus at least one `https://github.com/` evidence page.
+3. Anyone can call `resolve_submission`. Before the LLM runs, the contract checks that the submitter wallet (`gl.message.sender_address`, lowercase hex) appears in the pull request page. If it does not, the verdict is `REJECTED` with no LLM call.
+4. `ACCEPTED` with confidence of at least 60 pays the full reward to the contributor. `REJECTED` before the deadline reopens the bounty and leaves the funds in escrow. `REJECTED` after the deadline refunds the maintainer.
+5. Confidence under 60 sets `DISPUTED`. Only the current contributor can submit again. Everyone else is blocked until the next resolution or the deadline.
+6. After the deadline, while the status is `OPEN` or `DISPUTED`, the maintainer calls `claim_expired_refund`. A `SUBMITTED` bounty that has expired cannot skip resolution.
+7. Every transfer goes through `_settle`, which stores the recipient and the success status before `emit_transfer`. `retry_resolution` reads that stored intent and does not run the AI again.
 
-## Bảng đối chiếu số tiền
+## Money map
 
-Chỉ có một field tiền: `reward_amount`, đơn vị wei (1 GEN = 10^18). Không có field tiền thứ hai. Deadline là Unix giây, không phải tiền.
+The only money field is `reward_amount`, in wei (1 GEN = 10^18). The deadline is a Unix second count, not money.
 
-| Việc | Nơi | Cách xử lý |
+| Direction | Where | How |
 |---|---|---|
-| WRITE | Frontend, lúc tạo bounty | Chuỗi GEN (`"5"`, `"1.5"`) hoặc chip đi vào `parseGenToWei`. Kết quả `bigint` wei gửi trong `value` của `create_bounty`. |
-| WRITE | Contract `create_bounty` | `reward_amount = bigint(gl.message.value)`. Không nhân, không chia, không làm tròn. |
-| READ | Contract `get_bounty` | Trả `reward_amount` nguyên wei. |
-| READ | Frontend, bảng bounty và dòng xác nhận | `formatWeiToGen(reward_amount)`. |
-| Giải ngân | `_try_settlement` | `emit_transfer(value=u256(reward_amount))` đúng số đã khoá, cho đúng người trong ý định giải ngân. |
+| WRITE | Frontend, when creating a bounty | A GEN string (`"5"`, `"1.5"`) or a chip goes through `parseGenToWei`. The wei `bigint` is the `value` of `create_bounty`. |
+| WRITE | Contract `create_bounty` | `reward_amount = bigint(gl.message.value)`. No multiply, divide, or rounding. |
+| READ | Contract `get_bounty` | Returns `reward_amount` unchanged, in wei. |
+| READ | Frontend bounty list and confirmation line | `formatWeiToGen(reward_amount)`. |
+| Payout | `_try_settlement` | `emit_transfer(value=u256(reward_amount))` sends the locked amount to the recipient stored in the payout intent. |
 
-`parseGenToWei` / `formatWeiToGen` chỉ dùng tách chuỗi và `BigInt`. `scripts/check-no-float-money.js` chạy ở `prebuild` và từ chối `parseFloat`, `Math.round`, `Math.floor`, `Math.ceil` nếu đứng gần `reward`, `amount`, `payout`, `refund`, `balance`, `wei`, `gen`.
+`parseGenToWei` and `formatWeiToGen` use string splitting and `BigInt` only. `scripts/check-no-float-money.js` runs on `prebuild` and rejects `parseFloat`, `Math.round`, `Math.floor`, and `Math.ceil` when they sit near `reward`, `amount`, `payout`, `refund`, `balance`, `wei`, or `gen`.
 
-## Giới hạn trung thực
+## Honest limits
 
-1. AI đánh giá PR có đáp ứng tiêu chí hay không, **không đảm bảo code đúng tuyệt đối**. Tiêu chí càng khách quan, kiểm chứng được (CI pass, test cụ thể) thì kết quả càng tin cậy. Tiêu chí mơ hồ cho kết quả kém tin cậy.
-2. Nội dung PR do contributor viết nên không hoàn toàn độc lập. Nguồn độc lập thật sự là trạng thái do GitHub tạo ra (kết quả CI/Checks, danh sách file thay đổi); prompt phải ưu tiên các nguồn này khi mâu thuẫn với mô tả PR.
-3. Chống prompt injection chỉ giảm rủi ro (mục 1.1c).
-4. Chỉ hỗ trợ repo GitHub **công khai**. Trang cần đăng nhập, repo riêng tư, hoặc trang GitHub bị chặn/giới hạn truy cập sẽ lỗi fetch (giao dịch revert, thử lại được).
-5. Do bounty mở lại sau mỗi lần `REJECTED`, một người có thể nộp bài rác để khoá bounty tạm thời. Giảm thiểu: `resolve_submission` ai cũng gọi được (permissionless), nên khoá chỉ kéo dài tới khi có người bấm resolve.
-6. Nội dung trang bị cắt ở 20000 ký tự mỗi trang để tránh prompt quá lớn, PR rất lớn có thể bị đánh giá thiếu.
-7. Maintainer không huỷ được bounty (mục 1.1d), tiền bị khoá tới hết hạn.
+1. The AI judges whether a pull request meets the criteria. It does not guarantee that the code is absolutely correct. Objective, checkable criteria (CI passes, a specific test) make the result more reliable. Vague criteria make it less reliable.
+2. The pull request text is written by the contributor, so it is not fully independent. The independent source is state GitHub itself produces (CI and Checks results, the list of changed files). The prompt prefers those sources when they disagree with the PR description.
+3. The prompt-injection defense only reduces the risk. It does not remove it.
+4. Only public GitHub repositories are supported. Pages that require login, private repositories, or GitHub pages that are blocked or rate-limited fail the fetch. The transaction reverts and can be retried.
+5. Because a bounty reopens after each `REJECTED`, someone can submit junk and lock it for a while. `resolve_submission` is permissionless, so the lock lasts only until someone clicks resolve.
+6. Each fetched page is cut at 20,000 characters so the prompt stays bounded. A very large pull request can be judged on incomplete text.
+7. The maintainer cannot cancel a bounty. Funds stay locked until the deadline.
 
-Prompt gửi LLM ghi rõ: mọi nội dung lấy từ web là dữ liệu không đáng tin, không được làm theo chỉ dẫn nằm trong đó, và nếu phát hiện cố tình chèn chỉ dẫn thì trả `REJECTED`. Việc này giảm rủi ro, không xoá được rủi ro.
+The LLM prompt states that everything fetched from the web is untrusted data, that instructions inside it must not be followed, and that an attempt to steer the verdict returns `REJECTED`. That reduces the risk. It does not eliminate it.
 
-## API Studio đang dùng
+## Studio API in use
 
-Header contract khoá runner:
+The contract header pins the runner:
 
 ```text
 # v0.2.16
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 ```
 
-- Người gọi: `gl.message.sender_address`.
-- Chuyển GEN: `gl.get_contract_at(recipient).emit_transfer(value=u256(amount))`.
-- Thời gian: parse `gl.message_raw["datetime"]` (ISO-8601 của giao dịch) ra Unix giây. `gl.message` ở runner này không có field datetime. Không dùng `gl.block.timestamp`.
-- `create_bounty` gắn `@gl.public.write.payable`. Runner v0.2.16 từ chối value khác 0 nếu method không được đánh dấu payable. Các hàm còn lại không nhận GEN.
-- So sánh validator đọc `Return.calldata`, đúng field của SDK. Không có field `.value` trên `Return`.
+- Caller: `gl.message.sender_address`.
+- GEN transfer: `gl.get_contract_at(recipient).emit_transfer(value=u256(amount))`.
+- Time: parse `gl.message_raw["datetime"]` (the transaction's ISO-8601 time) into Unix seconds. On this runner, `gl.message` has no datetime field. `gl.block.timestamp` is not used.
+- `create_bounty` is `@gl.public.write.payable`. Runner v0.2.16 rejects a non-zero value on a method that is not payable. The other methods do not receive GEN.
+- The validator reads `Return.calldata`, which is the SDK field. `Return` has no `.value` field.
 
-## Deploy contract trên studionet
+## Deployed Contract
 
-Việc deploy contract là thao tác tay trên GenLayer Studio. Repo này không tự deploy.
+- Address (studionet): `0x9FB944605bAFe0FfBBE679b65B054afA6bAb3CF1`
+- Explorer: https://genlayer-explorer.vercel.app/address/0x9FB944605bAFe0FfBBE679b65B054afA6bAb3CF1
 
-1. Mở Studio, network **studionet**.
-2. Dán nguyên file `contracts/merge_bounty.py`.
-3. Constructor không có tham số. Deploy và đợi `Result: SUCCESS`.
-4. Gửi lại địa chỉ contract.
-
-Khi có địa chỉ:
-
-1. Ghi vào `frontend/.env`: `VITE_CONTRACT_ADDRESS=0x...`
-2. `npm run build` trong `frontend` (script chống số thực chạy trước).
-3. App production trỏ đúng studionet, không đổi sang testnet.
-
-Trước khi có địa chỉ, frontend vẫn mở: banner vàng báo chưa có contract, form soạn bounty không gọi chuỗi và không làm trắng trang.
-
-## Chạy test
+## Tests
 
 ```bash
 python -m pytest tests/test_merge_bounty.py -q
 ```
 
-Test chạy bằng gltest direct mode (cùng gói `genlayer-test`): `vm.mock_web` và `vm.mock_llm` được cài trước mỗi giao dịch nondet. Đây là đường tương đương `sim_installMocks` khi không cần Docker Studio. File `gltest.config.yaml` để default network là studionet cho lần chạy studio sau này.
+Tests use gltest direct mode (`genlayer-test`). `vm.mock_web` and `vm.mock_llm` are installed before each nondeterministic transaction. `gltest.config.yaml` keeps the default network on studionet.
 
 ## Frontend
 
@@ -96,10 +84,6 @@ npm install
 npm run dev
 ```
 
-Dev server: http://localhost:5173 (studionet).
+Dev server: http://localhost:5173 on studionet.
 
-Mạng ví là studionet. Ô tiêu chí là checkbox; hạn là 7 / 14 / 30 / 60 ngày; thưởng là chip GEN. Mọi link GitHub có nút dán và bị chặn nếu không bắt đầu bằng `https://github.com/`.
-
-## Địa chỉ contract
-
-Chưa deploy. Điền sau khi Studio trả `Result: SUCCESS`.
+Criteria are checkboxes. The deadline is 7, 14, 30, or 60 days. The reward is a GEN chip. Every GitHub link has a paste button and must start with `https://github.com/`.

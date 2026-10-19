@@ -13,11 +13,11 @@ import {
 } from './genlayerClient';
 
 const CRITERIA = [
-  { id: 'ci', text: 'CI pass toàn bộ trên pull request.' },
-  { id: 'tests', text: 'Có test cho phần thay đổi.' },
-  { id: 'scope', text: 'Không sửa file ngoài phạm vi nêu trong issue.' },
-  { id: 'docs', text: 'Cập nhật tài liệu liên quan nếu hành vi người dùng đổi.' },
-  { id: 'deps', text: 'Không thêm dependency mới.' }
+  { id: 'ci', text: 'CI passes on the pull request.' },
+  { id: 'tests', text: 'The change includes tests for the modified behavior.' },
+  { id: 'scope', text: 'No files are changed outside the scope named in the issue.' },
+  { id: 'docs', text: 'Related docs are updated when user-facing behavior changes.' },
+  { id: 'deps', text: 'No new dependency is added.' }
 ];
 const REWARD_CHIPS = ['1', '5', '10', '25', '50'];
 const DAY_OPTIONS = [7, 14, 30, 60];
@@ -49,7 +49,7 @@ const formatWhen = (unix) => {
     const sec = BigInt(unix);
     const date = new Date(Number(sec * 1000n));
     if (Number.isNaN(date.getTime())) return String(unix);
-    return date.toLocaleString('vi-VN');
+    return date.toLocaleString('en-US');
   } catch {
     return String(unix ?? '');
   }
@@ -72,13 +72,13 @@ const statusTag = (status) => {
 };
 
 const statusText = {
-  OPEN: 'Đang mở',
-  SUBMITTED: 'Đã nộp, chờ AI',
-  DISPUTED: 'Cần nộp lại bằng chứng',
-  RESOLVED_PAID: 'Đã trả thưởng',
-  RESOLVED_REFUNDED: 'Đã hoàn maintainer',
-  EXPIRED_REFUNDED: 'Hết hạn, đã hoàn',
-  PAYOUT_FAILED: 'Chuyển tiền lỗi'
+  OPEN: 'Open',
+  SUBMITTED: 'Submitted, waiting for AI',
+  DISPUTED: 'Needs fresh evidence',
+  RESOLVED_PAID: 'Reward paid',
+  RESOLVED_REFUNDED: 'Refunded to maintainer',
+  EXPIRED_REFUNDED: 'Expired and refunded',
+  PAYOUT_FAILED: 'Transfer failed'
 };
 
 function GithubField({ label, value, onChange, placeholder, kind }) {
@@ -97,10 +97,10 @@ function GithubField({ label, value, onChange, placeholder, kind }) {
       <label>{label}</label>
       <div className="row">
         <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value.trimStart())} />
-        <button type="button" className="ghost" onClick={paste}>Dán</button>
+        <button type="button" className="ghost" onClick={paste}>Paste</button>
       </div>
-      {valid === false && <p className="bad">Link phải bắt đầu bằng https://github.com/{kind === 'issue' ? ' và chứa /issues/' : kind === 'pr' ? ' và chứa /pull/' : ''}</p>}
-      {valid === true && <p className="ok">Link hợp lệ.</p>}
+      {valid === false && <p className="bad">The link must start with https://github.com/{kind === 'issue' ? ' and include /issues/' : kind === 'pr' ? ' and include /pull/' : ''}</p>}
+      {valid === true && <p className="ok">Link looks valid.</p>}
     </div>
   );
 }
@@ -161,7 +161,7 @@ export default function App() {
       setBounties(rows);
     } catch (err) {
       console.warn(err);
-      setError('Không đọc được danh sách bounty. Kiểm tra mạng studionet và địa chỉ contract.');
+      setError('Could not load bounties. Check that the wallet is on studionet and the contract address is set.');
     } finally {
       setLoading(false);
     }
@@ -171,7 +171,7 @@ export default function App() {
 
   const connect = async () => {
     if (!window.ethereum) {
-      setError('Cần MetaMask để kết nối ví trên studionet.');
+      setError('MetaMask is required to connect a wallet on studionet.');
       return;
     }
     setError('');
@@ -191,9 +191,9 @@ export default function App() {
         args,
         value: value > 0n ? value.toString() : '0x0'
       });
-      setMessage('Đang chờ studionet xác nhận...');
+      setMessage('Waiting for studionet to confirm...');
       await waitForFinalizedTx(tx);
-      setMessage('Giao dịch đã được chấp nhận.');
+      setMessage('Transaction accepted.');
       await loadBounties();
     } catch (err) {
       setError(String(err?.message || err));
@@ -205,21 +205,21 @@ export default function App() {
 
   const createBounty = () => {
     const deadline = deadlineFromDays(days);
-    runTx('Đang tạo bounty và khoá GEN...', 'create_bounty', [title.trim(), issueUrl.trim(), criteria, deadline], rewardWei);
+    runTx('Locking GEN and creating the bounty...', 'create_bounty', [title.trim(), issueUrl.trim(), criteria, deadline], rewardWei);
   };
 
   const submitSolution = (bountyId) => {
-    runTx('Đang nộp lời giải...', 'submit_solution', [bountyId, prUrl.trim(), evidenceOk]);
+    runTx('Submitting the solution...', 'submit_solution', [bountyId, prUrl.trim(), evidenceOk]);
   };
 
   const copyLine = async () => {
     if (!payoutLine) return;
     try {
       await navigator.clipboard.writeText(payoutLine);
-      setMessage('Đã chép dòng ví. Dán vào mô tả PR trước khi nộp.');
+      setMessage('Wallet line copied. Paste it into the PR description before you submit.');
     } catch (err) {
       console.warn(err);
-      setError('Trình duyệt chặn clipboard. Hãy chọn và chép dòng ví bằng tay.');
+      setError('The browser blocked the clipboard. Select the wallet line and copy it yourself.');
     }
   };
 
@@ -233,7 +233,7 @@ export default function App() {
             <h1>MergeBounty</h1>
           </div>
           <p className="sub">
-            Escrow thưởng GEN cho pull request. AI của GenLayer đối chiếu tiêu chí với issue, PR và trang CI — merge của maintainer không phải điều kiện trả thưởng.
+            GEN escrow for pull requests. GenLayer's AI consensus checks the issue, the PR, and CI. A maintainer merge is not required to pay the reward.
           </p>
         </div>
         <div className="wallet">
@@ -241,29 +241,29 @@ export default function App() {
           {account ? (
             <span className="ghost">{account.slice(0, 6)}…{account.slice(-4)}</span>
           ) : (
-            <button type="button" className="primary" onClick={connect}>Kết nối ví</button>
+            <button type="button" className="primary" onClick={connect}>Connect wallet</button>
           )}
         </div>
       </header>
 
-      <div className="banner">Miễn phí sử dụng — chỉ tốn phí gas mạng GenLayer khi ký giao dịch. Không có phí nền tảng nào khác.</div>
+      <div className="banner">Free to use. You only pay GenLayer gas when you sign a transaction. There is no platform fee.</div>
       {!HAS_CONTRACT && (
         <div className="warn">
-          Chưa có địa chỉ contract. App vẫn mở được để soạn bounty, nhưng chưa gửi giao dịch. Sau khi deploy tay trên studionet và có Result: SUCCESS, điền <code>VITE_CONTRACT_ADDRESS</code> rồi build lại.
+          No contract address yet. You can draft a bounty, but nothing is sent on-chain. After a studionet deploy returns Result: SUCCESS, set <code>VITE_CONTRACT_ADDRESS</code> and rebuild.
         </div>
       )}
       {HAS_CONTRACT && <p className="hint">Contract: {CONTRACT_ADDRESS}</p>}
 
       <div className="layout">
         <section className="card">
-          <h2>Tạo bounty</h2>
+          <h2>Create a bounty</h2>
           <div className="warn">
-            Tiền sẽ bị khoá tới hết hạn, không huỷ được giữa chừng. Link issue và tiêu chí không thể sửa sau khi tạo. Tiêu chí càng khách quan (CI pass, test cụ thể) thì kết quả càng đáng tin.
+            Funds stay locked until the deadline. You cannot cancel early. The issue link and the criteria cannot be edited after creation. Objective criteria, such as a green CI run or a specific test, produce a more reliable result.
           </div>
-          <label>Tiêu đề</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sửa parser rỗng" />
-          <GithubField label="Link issue GitHub" value={issueUrl} onChange={setIssueUrl} kind="issue" placeholder="https://github.com/owner/repo/issues/1" />
-          <label>Tiêu chí chấp nhận</label>
+          <label>Title</label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Fix the empty-input parser" />
+          <GithubField label="GitHub issue link" value={issueUrl} onChange={setIssueUrl} kind="issue" placeholder="https://github.com/owner/repo/issues/1" />
+          <label>Acceptance criteria</label>
           <div className="checks">
             {CRITERIA.map((item) => (
               <label className="check" key={item.id}>
@@ -278,15 +278,15 @@ export default function App() {
           </div>
           <div className="actions">
             <button type="button" className="ghost" onClick={() => setShowExtra((v) => !v)}>
-              {showExtra ? 'Ẩn tiêu chí khác' : 'Thêm tiêu chí khác'}
+              {showExtra ? 'Hide extra criterion' : 'Add another criterion'}
             </button>
           </div>
           {showExtra && (
-            <textarea value={extra} maxLength={240} onChange={(e) => setExtra(e.target.value)} placeholder="Một câu ngắn, kiểm chứng được" />
+            <textarea value={extra} maxLength={240} onChange={(e) => setExtra(e.target.value)} placeholder="One short, checkable sentence" />
           )}
-          {criteria ? <pre className="preview">{criteria}</pre> : <p className="bad">Chọn ít nhất một tiêu chí.</p>}
+          {criteria ? <pre className="preview">{criteria}</pre> : <p className="bad">Choose at least one criterion.</p>}
 
-          <label>Thưởng (GEN)</label>
+          <label>Reward (GEN)</label>
           <div className="pills">
             {REWARD_CHIPS.map((chip) => (
               <button type="button" key={chip} className={reward === chip ? 'pill on' : 'pill'} onClick={() => setReward(chip)}>
@@ -297,32 +297,32 @@ export default function App() {
           <input
             value={reward}
             onChange={(e) => setReward(sanitizeGenInput(e.target.value))}
-            placeholder="Số GEN"
+            placeholder="GEN amount"
           />
-          <p className="hint">Sẽ khoá {rewardWei > 0n ? formatWeiToGen(rewardWei) : '0'} GEN. Đơn vị trên chuỗi là wei, không làm tròn số thực.</p>
+          <p className="hint">This locks {rewardWei > 0n ? formatWeiToGen(rewardWei) : '0'} GEN. The chain stores wei, with no floating-point rounding.</p>
 
-          <label>Hạn</label>
+          <label>Deadline</label>
           <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {DAY_OPTIONS.map((option) => (
-              <option key={option} value={option}>{option} ngày</option>
+              <option key={option} value={option}>{option} days</option>
             ))}
           </select>
           <div className="actions">
             <button type="button" className="primary" disabled={!canCreate} onClick={createBounty}>
-              {busy || 'Khoá GEN và tạo bounty'}
+              {busy || 'Lock GEN and create bounty'}
             </button>
           </div>
         </section>
 
         <section className="card">
           <div className="board-head">
-            <h2>Bảng bounty</h2>
+            <h2>Open bounties</h2>
             <button type="button" className="ghost" onClick={loadBounties} disabled={!HAS_CONTRACT || loading}>
-              {loading ? 'Đang đọc...' : 'Làm mới'}
+              {loading ? 'Loading...' : 'Refresh'}
             </button>
           </div>
-          {!HAS_CONTRACT && <p className="empty">Chưa gắn contract nên chưa có bounty trên chuỗi. Form bên cạnh vẫn dùng để kiểm tra tiêu chí và link.</p>}
-          {HAS_CONTRACT && bounties.length === 0 && !loading && <p className="empty">Chưa có bounty nào.</p>}
+          {!HAS_CONTRACT && <p className="empty">No contract is configured, so there is nothing on-chain yet. The form still lets you check criteria and links.</p>}
+          {HAS_CONTRACT && bounties.length === 0 && !loading && <p className="empty">No bounties yet.</p>}
           {bounties.map((bounty) => {
             const maintainer = asAddress(bounty.maintainer);
             const contributor = asAddress(bounty.current_contributor);
@@ -341,12 +341,12 @@ export default function App() {
                 </header>
                 <div className="meta">
                   <span className="tag">{formatWeiToGen(bounty.reward_amount)} GEN</span>
-                  <span className="tag">Hạn {formatWhen(bounty.deadline)}</span>
-                  <span className="tag">Bị từ chối {String(bounty.rejected_count ?? 0)} lần</span>
+                  <span className="tag">Deadline {formatWhen(bounty.deadline)}</span>
+                  <span className="tag">Rejected {String(bounty.rejected_count ?? 0)} times</span>
                 </div>
                 <div className="actions">
                   <button type="button" className="ghost" onClick={() => setOpenId(open ? '' : bounty.id)}>
-                    {open ? 'Thu gọn' : 'Mở'}
+                    {open ? 'Collapse' : 'Open'}
                   </button>
                   {bounty.issue_url && <a href={bounty.issue_url} target="_blank" rel="noreferrer">Issue</a>}
                 </div>
@@ -356,10 +356,10 @@ export default function App() {
                     <p className="hint">Maintainer {maintainer}</p>
                     {bounty.verdict && (
                       <p className="status-line">
-                        {bounty.verdict} · độ tin cậy {String(bounty.confidence)} · {bounty.verdict_reason}
+                        {bounty.verdict} · confidence {String(bounty.confidence)} · {bounty.verdict_reason}
                       </p>
                     )}
-                    {bounty.status === 'OPEN' && bounty.verdict === 'REJECTED' && <p className="ok">Bounty đã mở lại. Tiền vẫn nằm trong escrow.</p>}
+                    {bounty.status === 'OPEN' && bounty.verdict === 'REJECTED' && <p className="ok">The bounty is open again. The funds are still in escrow.</p>}
                     {(bounty.status === 'OPEN' || (bounty.status === 'DISPUTED' && isContributor)) && !expired && (
                       <SubmitBox
                         payoutLine={payoutLine}
@@ -373,20 +373,20 @@ export default function App() {
                         disputed={bounty.status === 'DISPUTED'}
                       />
                     )}
-                    {bounty.status === 'DISPUTED' && !isContributor && <p className="bad">Bounty đang khoá với contributor hiện tại cho tới khi họ nộp lại hoặc hết hạn.</p>}
+                    {bounty.status === 'DISPUTED' && !isContributor && <p className="bad">This bounty is locked to the current contributor until they resubmit or the deadline passes.</p>}
                     {bounty.status === 'SUBMITTED' && (
-                      <button type="button" className="primary" disabled={!!busy} onClick={() => runTx('AI đang đọc issue, PR và bằng chứng...', 'resolve_submission', [bounty.id])}>
-                        {busy.startsWith('AI') ? busy : 'Yêu cầu AI kiểm tra'}
+                      <button type="button" className="primary" disabled={!!busy} onClick={() => runTx('AI is reading the issue, pull request, and evidence...', 'resolve_submission', [bounty.id])}>
+                        {busy.startsWith('AI') ? busy : 'Ask AI to check'}
                       </button>
                     )}
                     {bounty.status === 'PAYOUT_FAILED' && (
-                      <button type="button" className="danger" disabled={!!busy} onClick={() => runTx('Đang thử chuyển lại...', 'retry_resolution', [bounty.id])}>
-                        Thử lại
+                      <button type="button" className="danger" disabled={!!busy} onClick={() => runTx('Retrying the transfer...', 'retry_resolution', [bounty.id])}>
+                        Try again
                       </button>
                     )}
                     {canRefund && (
-                      <button type="button" className="primary" disabled={!!busy} onClick={() => runTx('Đang nhận lại tiền...', 'claim_expired_refund', [bounty.id])}>
-                        Nhận lại tiền
+                      <button type="button" className="primary" disabled={!!busy} onClick={() => runTx('Claiming the refund...', 'claim_expired_refund', [bounty.id])}>
+                        Claim refund
                       </button>
                     )}
                   </div>
@@ -405,18 +405,18 @@ export default function App() {
 function SubmitBox({ payoutLine, onCopy, prUrl, setPrUrl, evidence, setEvidence, canSubmit, onSubmit, disputed }) {
   return (
     <div>
-      <p>{disputed ? 'Chỉ ví đang giữ bài nộp được cập nhật PR và bằng chứng.' : 'Làm xong PR trong cùng repo, rồi nộp link.'}</p>
+      <p>{disputed ? 'Only the wallet that holds this submission can update the pull request and the evidence.' : 'Open a pull request in the same repository, then submit the links.'}</p>
       <div className="wallet-box">
-        <code>{payoutLine || 'Kết nối ví để hiện dòng Bounty payout wallet.'}</code>
+        <code>{payoutLine || 'Connect a wallet to show the payout line.'}</code>
         <button type="button" onClick={onCopy} disabled={!payoutLine}>Copy</button>
       </div>
-      <p className="hint">Dán dòng này vào mô tả PR trước khi nộp, nếu không bài nộp sẽ bị từ chối tự động.</p>
-      <GithubField label="Link pull request" value={prUrl} onChange={setPrUrl} kind="pr" placeholder="https://github.com/owner/repo/pull/2" />
-      <label>Link Files changed / Checks</label>
+      <p className="hint">Paste this line into the pull request description before you submit. Otherwise the submission is rejected automatically.</p>
+      <GithubField label="Pull request link" value={prUrl} onChange={setPrUrl} kind="pr" placeholder="https://github.com/owner/repo/pull/2" />
+      <label>Files changed and Checks links</label>
       {evidence.map((item, index) => (
         <GithubField
           key={`evidence-${index}`}
-          label={`Bằng chứng ${index + 1}`}
+          label={`Evidence ${index + 1}`}
           value={item}
           onChange={(next) => setEvidence((prev) => prev.map((row, i) => (i === index ? next : row)))}
           kind="page"
@@ -424,8 +424,8 @@ function SubmitBox({ payoutLine, onCopy, prUrl, setPrUrl, evidence, setEvidence,
         />
       ))}
       <div className="actions">
-        <button type="button" className="ghost" onClick={() => setEvidence((prev) => [...prev, ''])}>Thêm link</button>
-        <button type="button" className="primary" disabled={!canSubmit} onClick={onSubmit}>Nộp lời giải</button>
+        <button type="button" className="ghost" onClick={() => setEvidence((prev) => [...prev, ''])}>Add link</button>
+        <button type="button" className="primary" disabled={!canSubmit} onClick={onSubmit}>Submit solution</button>
       </div>
     </div>
   );

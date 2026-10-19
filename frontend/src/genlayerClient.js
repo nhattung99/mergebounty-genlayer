@@ -61,12 +61,12 @@ export const formatWriteError = (err) => {
   const msg = String(err?.shortMessage || err?.details || err?.message || err || '');
   const low = msg.toLowerCase();
   if (low.includes('user rejected') || low.includes('user denied') || low.includes('rejected the request')) {
-    return 'Đã huỷ giao dịch trong ví.';
+    return 'Transaction cancelled in the wallet.';
   }
   if (low.includes('insufficient') || low.includes('funds')) {
-    return 'Không đủ GEN cho tiền thưởng và phí gas.';
+    return 'Not enough GEN for the reward plus gas.';
   }
-  return msg || 'Giao dịch thất bại.';
+  return msg || 'Transaction failed.';
 };
 
 const toValueBigInt = (value) => {
@@ -119,14 +119,14 @@ export const switchToGenlayerStudionet = async () => {
 
 export const sendContractTransaction = async ({ from, to = CONTRACT_ADDRESS, functionName, args = [], value = '0x0' }) => {
   if (!HAS_CONTRACT) {
-    throw new Error('Chưa có địa chỉ contract. Deploy trên studionet rồi điền VITE_CONTRACT_ADDRESS.');
+    throw new Error('No contract address yet. Deploy on studionet, then set VITE_CONTRACT_ADDRESS.');
   }
   if (typeof window === 'undefined' || !window.ethereum) {
-    throw new Error('Cần ví Web3 (MetaMask) để ký giao dịch trên GenLayer.');
+    throw new Error('A Web3 wallet such as MetaMask is required to sign on GenLayer.');
   }
   const accs = await window.ethereum.request({ method: 'eth_requestAccounts' });
   const sender = toAddress(from) || (accs && accs[0]);
-  if (!sender) throw new Error('Chưa kết nối ví.');
+  if (!sender) throw new Error('No wallet is connected.');
   await switchToGenlayerStudionet();
   const client = getGenlayerClient(sender);
   if (!client || !client.writeContract) {
@@ -163,18 +163,18 @@ const waitForStudioEvmReceipt = async (txHash, maxRetries = 24, intervalMs = 200
     if (receipt) {
       const status = receipt.status;
       if (status === '0x0' || status === 0 || status === '0') {
-        throw new Error('Giao dịch studionet bị revert. Trạng thái contract không đổi.');
+        throw new Error('The studionet transaction reverted. Contract state was not changed.');
       }
       await new Promise((r) => setTimeout(r, 1500));
       return receipt;
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error(`Hết thời gian chờ receipt ${txHash}.`);
+  throw new Error(`Timed out waiting for receipt ${txHash}.`);
 };
 
 export const waitForFinalizedTx = async (txHash, maxRetries = 24, intervalMs = 2000) => {
-  if (!txHash) throw new Error('Thiếu mã giao dịch.');
+  if (!txHash) throw new Error('Missing transaction hash.');
   try {
     return await waitForStudioEvmReceipt(txHash, maxRetries, intervalMs);
   } catch (studioErr) {
@@ -192,7 +192,7 @@ export const waitForFinalizedTx = async (txHash, maxRetries = 24, intervalMs = 2
       const execName = receipt?.txExecutionResultName || receipt?.executionResult || receipt?.txExecutionResult;
       if (execName === ExecutionResult.FINISHED_WITH_ERROR) {
         const detail = receipt?.txExecutionError || receipt?.stderr || '';
-        throw new Error('Contract thực thi lỗi. Trạng thái không đổi. ' + String(detail));
+        throw new Error('Contract execution failed. State was not changed. ' + String(detail));
       }
       return receipt;
     } catch {

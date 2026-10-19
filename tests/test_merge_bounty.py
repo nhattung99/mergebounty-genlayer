@@ -96,7 +96,7 @@ def _create(contract, vm, maintainer, reward=REWARD, deadline=DEADLINE, issue=IS
         return contract.create_bounty(
             "Fix the parser",
             issue,
-            "1. CI pass toàn bộ.\n2. Có test cho phần thay đổi.",
+            "1. CI passes on the pull request.\n2. The change includes tests.",
             deadline,
         )
 

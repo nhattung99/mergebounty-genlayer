@@ -18,10 +18,10 @@ export class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <main className="crash">
-          <h1>Trang gặp lỗi khi vẽ giao diện</h1>
-          <p>Dữ liệu contract không làm sập toàn bộ ứng dụng. Tải lại để thử tiếp.</p>
+          <h1>This page hit a rendering error</h1>
+          <p>The error was caught so the rest of the app does not go blank. Reload to try again.</p>
           <pre>{String(this.state.error || '')}</pre>
-          <button type="button" onClick={() => window.location.reload()}>Tải lại</button>
+          <button type="button" onClick={() => window.location.reload()}>Reload</button>
         </main>
       );
     }
