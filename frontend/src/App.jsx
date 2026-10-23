@@ -11,6 +11,7 @@ import {
   switchToGenlayerStudionet,
   waitForFinalizedTx
 } from './genlayerClient';
+import { preflight } from './preflight';
 
 const CRITERIA = [
   { id: 'ci', text: 'CI passes on the pull request.' },
@@ -131,7 +132,6 @@ export default function App() {
 
   const evidenceOk = evidence.map((item) => item.trim()).filter(Boolean);
   const canCreate = Boolean(title.trim() && isIssue(issueUrl) && criteria && rewardWei > 0n && HAS_CONTRACT && account && !busy);
-  const canSubmit = Boolean(isPull(prUrl) && evidenceOk.length > 0 && evidenceOk.every(isGithub) && account && !busy);
 
   useEffect(() => {
     if (!window.ethereum) return undefined;
@@ -227,7 +227,7 @@ export default function App() {
     <div className="app">
       <header className="top">
         <div>
-          <p className="eyebrow">Open source · studionet</p>
+          <p className="eyebrow">Open source · studionet · v2</p>
           <div className="brand">
             <div className="mark">M</div>
             <h1>MergeBounty</h1>
@@ -285,6 +285,7 @@ export default function App() {
             <textarea value={extra} maxLength={240} onChange={(e) => setExtra(e.target.value)} placeholder="One short, checkable sentence" />
           )}
           {criteria ? <pre className="preview">{criteria}</pre> : <p className="bad">Choose at least one criterion.</p>}
+          {selected.ci && <p className="hint">Tick CI only when that repository runs a check that can go green. A missing check makes the verdict REJECTED.</p>}
 
           <label>Reward (GEN)</label>
           <div className="pills">
@@ -364,11 +365,14 @@ export default function App() {
                       <SubmitBox
                         payoutLine={payoutLine}
                         onCopy={copyLine}
+                        issueUrl={bounty.issue_url}
+                        maintainer={maintainer}
+                        account={account}
                         prUrl={prUrl}
                         setPrUrl={setPrUrl}
                         evidence={evidence}
                         setEvidence={setEvidence}
-                        canSubmit={canSubmit && HAS_CONTRACT}
+                        busy={!!busy}
                         onSubmit={() => submitSolution(bounty.id)}
                         disputed={bounty.status === 'DISPUTED'}
                       />
@@ -402,7 +406,15 @@ export default function App() {
   );
 }
 
-function SubmitBox({ payoutLine, onCopy, prUrl, setPrUrl, evidence, setEvidence, canSubmit, onSubmit, disputed }) {
+function SubmitBox({ payoutLine, onCopy, issueUrl, maintainer, account, prUrl, setPrUrl, evidence, setEvidence, busy, onSubmit, disputed }) {
+  const gate = preflight({ issueUrl, prUrl, evidence, account, maintainer });
+  const evidenceOk = evidence.map((item) => item.trim()).filter(Boolean);
+  const linksOk = Boolean(isPull(prUrl) && evidenceOk.length > 0 && evidenceOk.every(isGithub));
+  const canSubmit = linksOk && gate.ready && account && !busy && HAS_CONTRACT;
+  const fillPack = () => {
+    if (gate.pack.length < 2) return;
+    setEvidence(gate.pack);
+  };
   return (
     <div>
       <p>{disputed ? 'Only the wallet that holds this submission can update the pull request and the evidence.' : 'Open a pull request in the same repository, then submit the links.'}</p>
@@ -423,7 +435,13 @@ function SubmitBox({ payoutLine, onCopy, prUrl, setPrUrl, evidence, setEvidence,
           placeholder="https://github.com/owner/repo/pull/2/files"
         />
       ))}
+      <ul className="preflight">
+        {gate.checks.map((item) => (
+          <li key={item.id} className={item.ok ? 'ok' : 'bad'}>{item.ok ? 'Ready' : 'Needed'}: {item.label}</li>
+        ))}
+      </ul>
       <div className="actions">
+        <button type="button" className="ghost" onClick={fillPack} disabled={gate.pack.length < 2}>Fill Files and Checks</button>
         <button type="button" className="ghost" onClick={() => setEvidence((prev) => [...prev, ''])}>Add link</button>
         <button type="button" className="primary" disabled={!canSubmit} onClick={onSubmit}>Submit solution</button>
       </div>

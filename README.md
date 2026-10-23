@@ -91,3 +91,5 @@ npm run dev
 Dev server: http://localhost:5173 on studionet.
 
 Criteria are checkboxes. The deadline is 7, 14, 30, or 60 days. The reward is a GEN chip. Every GitHub link has a paste button and must start with `https://github.com/`.
+
+Version 2 adds a submission preflight. **Submit solution** stays disabled until the connected wallet is not the maintainer, the pull request is in the issue repository, and the evidence includes that pull request's `/files` and `/checks` pages. **Fill Files and Checks** writes those two links from the pull request URL. See `CHANGELOG.md`. The contract address did not change.
